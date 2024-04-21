@@ -1,0 +1,27 @@
+---
+title: "Final Project Playground"
+author: "Arthur Jakobsson"
+date: "04-21-2024"
+format: pdf
+---
+
+```{r}
+#| warning: false
+#| include: false
+#| echo: false
+library(nflreadr)
+library(dplyr)
+library(broom)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)
+library(glmnet)
+
+
+runStats <- load_nextgen_stats(
+  seasons = 2023,
+  stat_type = "rushing",
+  file_type = getOption("nflreadr.prefer", default = "rds")
+)
+
+```
