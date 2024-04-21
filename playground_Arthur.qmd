@@ -16,12 +16,27 @@ library(tidyr)
 library(tidyverse)
 library(ggplot2)
 library(glmnet)
+library(progressr)
 
 
-runStats <- load_nextgen_stats(
-  seasons = 2023,
-  stat_type = "rushing",
-  file_type = getOption("nflreadr.prefer", default = "rds")
-)
+# ?nflreadr
+# runStats <- load_nextgen_stats(
+#   seasons = 2023,
+#   stat_type = "rushing",
+#   file_type = getOption("nflreadr.prefer", default = "rds")
+# )
 
+try({ # prevents cran errors
+  passing <- load_nextgen_stats(stat_type = "passing")
+  receiving <- load_nextgen_stats(stat_type = "receiving")
+  rushing <- load_nextgen_stats(stat_type = "rushing")
+})
+# pbp <- with_progress(load_pbp(2021))
+# player_stats <- with_progress(load_player_stats(2021))
+```
+
+```{r}
+head(passing)
+head(receiving)
+head(rushing)
 ```
