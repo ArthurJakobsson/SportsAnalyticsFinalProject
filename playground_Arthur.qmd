@@ -9,6 +9,7 @@ format: pdf
 #| warning: false
 #| include: false
 #| echo: false
+
 library(nflreadr)
 library(dplyr)
 library(broom)
@@ -17,7 +18,6 @@ library(tidyverse)
 library(ggplot2)
 library(glmnet)
 library(progressr)
-
 
 # ?nflreadr
 # runStats <- load_nextgen_stats(
@@ -31,12 +31,50 @@ try({ # prevents cran errors
   receiving <- load_nextgen_stats(stat_type = "receiving")
   rushing <- load_nextgen_stats(stat_type = "rushing")
 })
-# pbp <- with_progress(load_pbp(2021))
-# player_stats <- with_progress(load_player_stats(2021))
+pbp <- load_pbp(
+  seasons = 2023,
+  file_type = getOption("nflreadr.prefer", default = "rds")
+)
 ```
 
 ```{r}
-head(passing)
-head(receiving)
-head(rushing)
+pbp <- pbp %>% drop_na(drive)
+pbp$game_drive_id <- paste(pbp$game_id, pbp$drive, sep="_")
+```
+
+
+```{r}
+game_drive_id = unique(pbp$game_drive_id)
+dbd <- data.frame(game_drive_id)
+
+
+# add columns that we want for now
+dbd[, 'num_run'] = 0
+dbd[, 'num_pass'] = 0
+dbd[, 'num_no_play'] = 0
+dbd[, 'num_qb_kneel'] = 0
+dbd[, 'num_qb_spike'] = 0
+dbd[, 'total_yards_gained'] = 0
+
+
+fill_row <- function(row_num, row_id, dbd, data = pbp){
+  curr_set = subset(data, data$game_drive_id==row_id)
+  dbd$num_run[row_num] = sum(curr_set$play_type=="run", na.rm=T)
+  dbd$num_pass[row_num] = sum(curr_set$play_type=="pass", na.rm=T)
+  dbd$num_no_play[row_num] = sum(curr_set$play_type == "no_play", na.rm=T)
+  dbd$num_qb_kneel[row_num] = sum(curr_set$play_type == "qb_kneel", na.rm=T)
+  dbd$num_qb_spike[row_num] = sum(curr_set$play_type == "qb_spike", na.rm=T)
+  dbd$total_yards_gained[row_num] = sum(curr_set$yards_gained, na.rm=T)
+  return (dbd)
+}
+
+dbd_create <- function(dbd){
+  for (row_num in 1:nrow(dbd))
+  {
+    dbd <- fill_row(row_num, dbd$game_drive_id[row_num], dbd)
+  }
+  return (dbd)
+}
+
+dbd <- dbd_create(dbd)
 ```
