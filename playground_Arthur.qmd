@@ -151,30 +151,7 @@ scatter_matrix <- lapply(study_vars, function(var) {
 
 (scatter_matrix)
 ```
-```{r}
-#| warning: false
-#| message: false
-play_vars <- c("num_run", "num_pass", "num_no_play", "num_qb_kneel", "num_qb_spike", "total_yards_gained", "yardline_100")
 
-# Weather related variables
-weather_vars <- c("temperature", "humidity", "wind_speed")
-
-# Create scatterplots for each combination
-scatterplots <- lapply(play_vars, function(play_var) {
-  lapply(weather_vars, function(weather_var) {
-    ggplot(dbd, aes_string(x = weather_var, y = play_var)) +
-      geom_point() +
-      labs(title = paste(weather_var, "vs.", play_var)) +
-      theme_minimal()
-  })
-})
-
-# Flatten the list structure
-scatterplots <- unlist(scatterplots, recursive = FALSE)
-
-# Print scatterplots
-(scatterplots)
-```
 
 
 
