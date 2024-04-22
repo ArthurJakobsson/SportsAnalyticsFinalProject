@@ -38,7 +38,7 @@ pbp <- load_pbp(
 ```
 
 ```{r}
-pbp <- pbp %>% drop_na(drive)
+pbp <- pbp %>% drop_na(drive) %>% drop_na(play_type) %>% drop_na(posteam) %>% filter(play_type != "kickoff" & play_type != "extra_point" & play_type != "field_goal" & play_type != "punt")
 pbp$game_drive_id <- paste(pbp$game_id, pbp$drive, sep="_")
 ```
 
@@ -102,6 +102,87 @@ dbd_create <- function(dbd){
 
 dbd <- dbd_create(dbd)
 ```
+
+# EDA
+
+```{r}
+numeric_vars <- c("num_run", "num_pass", "num_no_play", "num_qb_kneel", "num_qb_spike", "total_yards_gained", "yardline_100", "temperature", "humidity", "wind_speed", "drive_first_downs")
+
+
+# Histogram for numeric variables
+hist_plot <- lapply(numeric_vars, function(var) {
+  ggplot(dbd, aes(x = !!as.name(var))) +
+    geom_histogram(fill = "#0072B2", color = "#0072B2", bins = 20) +
+    labs(title = var) +
+    theme_minimal()
+})
+
+(hist_plot)
+
+# Boxplot for numeric variables by 'roof'
+# boxplot_roof <- lapply(numeric_vars, function(var) {
+#   ggplot(dbd, aes(x = roof, y = !!as.name(var), fill = roof)) +
+#     geom_boxplot() +
+#     labs(title = var) +
+#     theme_minimal()
+# })
+
+# (boxplot_roof)
+
+# Now let's explore categorical variables
+
+# Bar plot for 'fixed_drive_result'
+bar_drive_result <- ggplot(dbd, aes(x = fixed_drive_result, fill = fixed_drive_result)) +
+  geom_bar() +
+  labs(title = "fixed_drive_result") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+(bar_drive_result)
+
+study_vars <- c("num_run", "num_pass", "num_no_play", "num_qb_kneel", "num_qb_spike", "total_yards_gained", "yardline_100", "drive_first_downs")
+
+scatter_matrix <- lapply(study_vars, function(var) {
+  ggplot(dbd, aes_string(x = var, y = "posteam_type")) +
+    geom_boxplot(fill = "#0072B2") +
+    labs(title = paste(var, "vs. posteam")) +
+    theme_minimal()
+})
+
+(scatter_matrix)
+```
+```{r}
+#| warning: false
+#| message: false
+play_vars <- c("num_run", "num_pass", "num_no_play", "num_qb_kneel", "num_qb_spike", "total_yards_gained", "yardline_100")
+
+# Weather related variables
+weather_vars <- c("temperature", "humidity", "wind_speed")
+
+# Create scatterplots for each combination
+scatterplots <- lapply(play_vars, function(play_var) {
+  lapply(weather_vars, function(weather_var) {
+    ggplot(dbd, aes_string(x = weather_var, y = play_var)) +
+      geom_point() +
+      labs(title = paste(weather_var, "vs.", play_var)) +
+      theme_minimal()
+  })
+})
+
+# Flatten the list structure
+scatterplots <- unlist(scatterplots, recursive = FALSE)
+
+# Print scatterplots
+(scatterplots)
+```
+
+
+
+
+
+
+
+
 
 
 
