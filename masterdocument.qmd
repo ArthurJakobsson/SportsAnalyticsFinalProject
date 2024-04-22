@@ -112,8 +112,33 @@ dbd_create <- function(dbd){
 dbd <- dbd_create(dbd)
 ```
 
+```{r}
+dbd$plays = dbd$num_run + dbd$num_pass + dbd$num_no_play + dbd$num_qb_kneel + dbd$num_qb_spike
+dbd$runPercent = (dbd$num_run / dbd$plays) * 100
+dbd$passPercent = (dbd$num_pass / dbd$plays) * 100
+unique(dbd$fixed_drive_result)
+
+dbd <- dbd %>%
+  mutate(drivePoints = case_when(
+    fixed_drive_result == "Punt" ~ 0,
+    fixed_drive_result == "Touchdown" ~ 7,
+    fixed_drive_result == "Opp touchdown" ~ -7,
+    fixed_drive_result == "Field goal" ~ -3,
+    fixed_drive_result == "Turnover" ~ 0,
+    fixed_drive_result == "Turnover on downs" ~ 0,
+    fixed_drive_result == "End of half" ~ 0,
+    fixed_drive_result == "Missed field goal" ~ 0,
+    fixed_drive_result == "Safety" ~ -2,
+    TRUE ~ NA_real_  # This line handles any values not explicitly mentioned
+  ))
+dbd
+```
 
 
+```{r}
+lmModel = lm(drivePoints ~ runPercent + passPercent + temperature + posteam_type, data = dbd)
+summary(lmModel)
+```
 
 
 
