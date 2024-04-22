@@ -49,12 +49,20 @@ dbd <- data.frame(game_drive_id)
 
 
 # add columns that we want for now
-dbd[, 'num_run'] = 0
-dbd[, 'num_pass'] = 0
-dbd[, 'num_no_play'] = 0
-dbd[, 'num_qb_kneel'] = 0
-dbd[, 'num_qb_spike'] = 0
-dbd[, 'total_yards_gained'] = 0
+dbd[, 'num_run'] = NA
+dbd[, 'num_pass'] = NA
+dbd[, 'num_no_play'] = NA
+dbd[, 'num_qb_kneel'] = NA
+dbd[, 'num_qb_spike'] = NA
+dbd[, 'total_yards_gained'] = NA
+dbd[, 'posteam_type'] = NA
+dbd[, 'fixed_drive_result'] = NA
+dbd[,'yardline_100'] = NA
+dbd[, 'weather'] = NA
+dbd[, 'temperature'] = NA
+dbd[, 'humidity'] = NA
+dbd[, 'wind_speed'] = NA
+dbd[, 'roof'] = NA
 
 
 fill_row <- function(row_num, row_id, dbd, data = pbp){
@@ -65,11 +73,27 @@ fill_row <- function(row_num, row_id, dbd, data = pbp){
   dbd$num_qb_kneel[row_num] = sum(curr_set$play_type == "qb_kneel", na.rm=T)
   dbd$num_qb_spike[row_num] = sum(curr_set$play_type == "qb_spike", na.rm=T)
   dbd$total_yards_gained[row_num] = sum(curr_set$yards_gained, na.rm=T)
+  dbd$posteam_type[row_num] = curr_set$posteam_type[1]
+  dbd$fixed_drive_result[row_num] = curr_set$fixed_drive_result[1]
+  dbd$yardline_100[row_num] = curr_set$yardline_100[1]
+  dbd$weather[row_num] = curr_set$weather[1]
+  dbd$roof[row_num] = curr_set$roof[1]
+  dbd$drive_first_downs[row_num] = curr_set$drive_first_downs[1]
+  if (!is.na(dbd$weather[row_num]))
+  {
+    weather_string = dbd$weather[row_num]
+    splut = unlist(strsplit(weather_string, split = "[:]"))
+    dbd$temperature[row_num] = strtoi(substring(splut[[2]], 2, nchar(splut[[2]])-13))
+    dbd$humidity[row_num] = strtoi(substring(splut[[3]], 2, nchar(splut[[3]])-7))
+    dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-6, nchar(splut[[4]])-4))
+    if (is.na(dbd$wind_speed[row_num]))
+      dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-5, nchar(splut[[4]])-4))
+  }
   return (dbd)
 }
 
 dbd_create <- function(dbd){
-  for (row_num in 1:nrow(dbd))
+  for (row_num in 1:nrow(dbd)) 
   {
     dbd <- fill_row(row_num, dbd$game_drive_id[row_num], dbd)
   }
@@ -78,3 +102,6 @@ dbd_create <- function(dbd){
 
 dbd <- dbd_create(dbd)
 ```
+
+
+
