@@ -18,6 +18,8 @@ library(tidyverse)
 library(ggplot2)
 library(glmnet)
 library(progressr)
+library(MASS)
+library("pscl")
 
 # ?nflreadr
 # runStats <- load_nextgen_stats(
@@ -63,6 +65,8 @@ dbd[, 'temperature'] = NA
 dbd[, 'humidity'] = NA
 dbd[, 'wind_speed'] = NA
 dbd[, 'roof'] = NA
+dbd[, 'posteam'] = NA
+dbd[, 'defteam'] = NA
 
 
 fill_row <- function(row_num, row_id, dbd, data = pbp){
@@ -77,6 +81,8 @@ fill_row <- function(row_num, row_id, dbd, data = pbp){
   dbd$fixed_drive_result[row_num] = curr_set$fixed_drive_result[1]
   dbd$yardline_100[row_num] = curr_set$yardline_100[1]
   dbd$weather[row_num] = curr_set$weather[1]
+  dbd$posteam[row_num] = curr_set$posteam[1]
+  dbd$defteam[row_num] = curr_set$posteam[1]
   dbd$roof[row_num] = curr_set$roof[1]
   dbd$drive_first_downs[row_num] = curr_set$drive_first_downs[1]
   if (!is.na(dbd$weather[row_num]))
@@ -155,10 +161,18 @@ scatter_matrix <- lapply(study_vars, function(var) {
 
 
 
+```{r}
+dbd_no_neg = dbd
+dbd_no_neg$total_yards_gained[dbd_no_neg$total_yards_gained<0] <- 0 
 
 
+# init_qpoiss <- glm.nb(total_yards_gained ~ yardline_100+runPercent+passPercent+as.factor(posteam_type), data = dbd_no_neg)
+# summary(init_qpoiss)
+dbd_no_neg$drivePoints[dbd_no_neg$drivePoints<0] <- 0 
 
-
+ZIP_model <- zeroinfl(drivePoints ~yardline_100+runPercent+passPercent+as.factor(posteam_type), data=dbd_no_neg, dist = "poisson", link="logit")
+summary(ZIP_model)
+```
 
 
 
