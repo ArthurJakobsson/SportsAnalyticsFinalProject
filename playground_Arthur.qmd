@@ -20,6 +20,7 @@ library(glmnet)
 library(progressr)
 library(MASS)
 library("pscl")
+library(knitr)
 
 # ?nflreadr
 # runStats <- load_nextgen_stats(
@@ -164,14 +165,10 @@ scatter_matrix <- lapply(study_vars, function(var) {
 ```{r}
 dbd_no_neg = dbd
 dbd_no_neg$total_yards_gained[dbd_no_neg$total_yards_gained<0] <- 0 
-
-
-# init_qpoiss <- glm.nb(total_yards_gained ~ yardline_100+runPercent+passPercent+as.factor(posteam_type), data = dbd_no_neg)
-# summary(init_qpoiss)
 dbd_no_neg$drivePoints[dbd_no_neg$drivePoints<0] <- 0 
 
-ZIP_model <- zeroinfl(drivePoints ~yardline_100+runPercent+passPercent+as.factor(posteam_type), data=dbd_no_neg, dist = "poisson", link="logit")
-summary(ZIP_model)
+ZIP_model <- zeroinfl(total_yards_gained ~yardline_100+runPercent+passPercent+as.factor(posteam_type), data=dbd_no_neg, dist = "poisson", link="logit")
+print(summary(ZIP_model), prmsd=TRUE, digits=1)
 ```
 
 

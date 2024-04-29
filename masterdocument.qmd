@@ -19,6 +19,10 @@ library(tidyverse)
 library(ggplot2)
 library(glmnet)
 library(progressr)
+library(MASS)
+library("pscl")
+library(knitr)
+library(mgcv)
 
 # ?nflreadr
 # runStats <- load_nextgen_stats(
@@ -33,7 +37,7 @@ try({ # prevents cran errors
   rushing <- load_nextgen_stats(stat_type = "rushing")
 })
 pbp <- load_pbp(
-  seasons = 2023,
+  seasons = 2019:2023,
   file_type = getOption("nflreadr.prefer", default = "rds")
 )
 ```
@@ -41,6 +45,7 @@ pbp <- load_pbp(
 ```{r}
 #| warning: false
 #| echo: false
+#| include: false
 
 
 pbp <- pbp %>% drop_na(drive)
@@ -51,7 +56,7 @@ pbp$game_drive_id <- paste(pbp$game_id, pbp$drive, sep="_")
 ```{r}
 #| warning: false
 #| echo: false
-
+#| include: false
 
 game_drive_id = unique(pbp$game_drive_id)
 dbd <- data.frame(game_drive_id)
@@ -88,16 +93,16 @@ fill_row <- function(row_num, row_id, dbd, data = pbp){
   dbd$weather[row_num] = curr_set$weather[1]
   dbd$roof[row_num] = curr_set$roof[1]
   dbd$drive_first_downs[row_num] = curr_set$drive_first_downs[1]
-  if (!is.na(dbd$weather[row_num]))
-  {
-    weather_string = dbd$weather[row_num]
-    splut = unlist(strsplit(weather_string, split = "[:]"))
-    dbd$temperature[row_num] = strtoi(substring(splut[[2]], 2, nchar(splut[[2]])-13))
-    dbd$humidity[row_num] = strtoi(substring(splut[[3]], 2, nchar(splut[[3]])-7))
-    dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-6, nchar(splut[[4]])-4))
-    if (is.na(dbd$wind_speed[row_num]))
-      dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-5, nchar(splut[[4]])-4))
-  }
+  # if (!is.na(dbd$weather[row_num]))
+  # {
+  #   weather_string = dbd$weather[row_num]
+  #   splut = unlist(strsplit(weather_string, split = "[:]"))
+  #   dbd$temperature[row_num] = strtoi(substring(splut[[2]], 2, nchar(splut[[2]])-13))
+  #   dbd$humidity[row_num] = strtoi(substring(splut[[3]], 2, nchar(splut[[3]])-7))
+  #   dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-6, nchar(splut[[4]])-4))
+  #   if (is.na(dbd$wind_speed[row_num]))
+  #     dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-5, nchar(splut[[4]])-4))
+  # }
   return (dbd)
 }
 
@@ -131,15 +136,55 @@ dbd <- dbd %>%
     fixed_drive_result == "Safety" ~ -2,
     TRUE ~ NA_real_  # This line handles any values not explicitly mentioned
   ))
-dbd
+```
+
+
+
+
+
+```{r}
+dbd_no_neg = dbd
+dbd_no_neg$total_yards_gained[dbd_no_neg$total_yards_gained<0] <- 0 
+dbd_no_neg$drivePoints[dbd_no_neg$drivePoints<0] <- 0 
+
+# ZIP_model <- zeroinfl(total_yards_gained ~yardline_100+runPercent+passPercent+as.factor(posteam_type), data=dbd_no_neg, dist = "poisson", link="logit")
+# summary(ZIP_model)
+
+pbp$yards_gained[pbp$yards_gained<0] <- 0 
+pbp <- pbp %>% drop_na(drive) %>% drop_na(play_type) %>% drop_na(posteam) %>% filter(play_type =="pass" | play_type=="run")
+
+ZIP_model <- zeroinfl(yards_gained ~ ydstogo+play_type+as.factor(posteam_type), data=pbp, dist = "poisson", link="logit")
+summary(ZIP_model)
+
+library(marginaleffects)
+plot_predictions(ZIP_model, condition = "play_type") 
+plot_predictions(ZIP_model, condition = "posteam_type")
+plot_predictions(ZIP_model, condition = "ydstogo")
+# plot_slopes(ZIP_model, variables = "play_type", condition = "ydstogo")
+```
+
+```{r}
+dbd_no_neg$more_runs = dbd_no_neg$runPercent>50
+DBD_ZIP_binary <- glm(drivePoints>0 ~ more_runs+as.factor(posteam_type), data=dbd_no_neg, family = binomial)
+summary(DBD_ZIP_binary)
+
+
+DBD_ZIP <- glm(drivePoints>0 ~ runPercent+as.factor(posteam_type), data=dbd_no_neg, family = binomial)
+summary(DBD_ZIP)
 ```
 
 
 ```{r}
-lmModel = lm(drivePoints ~ runPercent + passPercent + temperature + posteam_type, data = dbd)
-summary(lmModel)
+gamModel <- gam(epa ~ play_type + factor(down) + s(ydstogo), data = pbp, na.action=na.exclude)
+summary(gamModel)
+plot(gamModel, pages = 2)
 ```
 
 
+
+```{r}
+lmModel = lm(epa ~ play_type + factor(down) + ydstogo, data = pbp)
+summary(lmModel)
+```
 
 
