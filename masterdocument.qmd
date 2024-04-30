@@ -156,10 +156,10 @@ pbp <- pbp %>% drop_na(drive) %>% drop_na(play_type) %>% drop_na(posteam) %>% fi
 ZIP_model <- zeroinfl(yards_gained ~ ydstogo+play_type+as.factor(posteam_type), data=pbp, dist = "poisson", link="logit")
 summary(ZIP_model)
 
-library(marginaleffects)
-plot_predictions(ZIP_model, condition = "play_type") 
-plot_predictions(ZIP_model, condition = "posteam_type")
-plot_predictions(ZIP_model, condition = "ydstogo")
+# library(marginaleffects)
+# plot_predictions(ZIP_model, condition = "play_type") 
+# plot_predictions(ZIP_model, condition = "posteam_type")
+# plot_predictions(ZIP_model, condition = "ydstogo")
 # plot_slopes(ZIP_model, variables = "play_type", condition = "ydstogo")
 ```
 
@@ -169,8 +169,8 @@ DBD_ZIP_binary <- gam(drivePoints>0 ~ more_runs+as.factor(posteam_type), data=db
 summary(DBD_ZIP_binary)
 
 
-DBD_ZIP <- gam(drivePoints>0 ~ s(runPercent)+as.factor(posteam_type), data=dbd_no_neg)
-plot(DBD_ZIP, col="cornflowerblue", xlab="Percent of Plays that were Runs in Drive", ylab = "Relative Success s(")
+DBD_ZIP <- gam(drivePoints>0 ~ s(runPercent)+as.factor(posteam_type)+s(plays), data=dbd_no_neg)
+plot(DBD_ZIP, col="cornflowerblue")
 ```
 
 

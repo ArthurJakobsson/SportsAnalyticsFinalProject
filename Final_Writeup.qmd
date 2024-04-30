@@ -1,0 +1,275 @@
+---
+title: "The Run-Pass Conundrum: What’s The Better Play?"
+author: "Arthur Jakobsson, Elin Jang, Prathik Guduri"
+date: "4-30-2024"
+format: pdf
+---
+
+
+```{r, echo=FALSE, include=FALSE, warning=FALSE}
+#| warning: false
+#| include: false
+#| echo: false
+
+library(nflreadr)
+library(dplyr)
+library(broom)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)
+library(glmnet)
+library(progressr)
+library(MASS)
+library("pscl")
+library(knitr)
+library(mgcv)
+
+# ?nflreadr
+# runStats <- load_nextgen_stats(
+#   seasons = 2023,
+#   stat_type = "rushing",
+#   file_type = getOption("nflreadr.prefer", default = "rds")
+# )
+
+try({ # prevents cran errors
+  passing <- load_nextgen_stats(stat_type = "passing")
+  receiving <- load_nextgen_stats(stat_type = "receiving")
+  rushing <- load_nextgen_stats(stat_type = "rushing")
+})
+pbp <- load_pbp(
+  seasons = 2019:2023,
+  file_type = getOption("nflreadr.prefer", default = "rds")
+)
+```
+
+```{r, echo=FALSE, include=FALSE, warning=FALSE}
+#| warning: false
+#| echo: false
+#| include: false
+
+
+pbp <- pbp %>% drop_na(drive)
+pbp$game_drive_id <- paste(pbp$game_id, pbp$drive, sep="_")
+```
+
+
+```{r, echo=FALSE, include=FALSE, warning=FALSE}
+#| warning: false
+#| echo: false
+#| include: false
+
+game_drive_id = unique(pbp$game_drive_id)
+dbd <- data.frame(game_drive_id)
+
+
+# add columns that we want for now
+dbd[, 'num_run'] = NA
+dbd[, 'num_pass'] = NA
+dbd[, 'num_no_play'] = NA
+dbd[, 'num_qb_kneel'] = NA
+dbd[, 'num_qb_spike'] = NA
+dbd[, 'total_yards_gained'] = NA
+dbd[, 'posteam_type'] = NA
+dbd[, 'fixed_drive_result'] = NA
+dbd[,'yardline_100'] = NA
+dbd[, 'weather'] = NA
+dbd[, 'temperature'] = NA
+dbd[, 'humidity'] = NA
+dbd[, 'wind_speed'] = NA
+dbd[, 'roof'] = NA
+
+
+fill_row <- function(row_num, row_id, dbd, data = pbp){
+  curr_set = subset(data, data$game_drive_id==row_id)
+  dbd$num_run[row_num] = sum(curr_set$play_type=="run", na.rm=T)
+  dbd$num_pass[row_num] = sum(curr_set$play_type=="pass", na.rm=T)
+  dbd$num_no_play[row_num] = sum(curr_set$play_type == "no_play", na.rm=T)
+  dbd$num_qb_kneel[row_num] = sum(curr_set$play_type == "qb_kneel", na.rm=T)
+  dbd$num_qb_spike[row_num] = sum(curr_set$play_type == "qb_spike", na.rm=T)
+  dbd$total_yards_gained[row_num] = sum(curr_set$yards_gained, na.rm=T)
+  dbd$posteam_type[row_num] = curr_set$posteam_type[1]
+  dbd$fixed_drive_result[row_num] = curr_set$fixed_drive_result[1]
+  dbd$yardline_100[row_num] = curr_set$yardline_100[1]
+  dbd$weather[row_num] = curr_set$weather[1]
+  dbd$roof[row_num] = curr_set$roof[1]
+  dbd$drive_first_downs[row_num] = curr_set$drive_first_downs[1]
+  # if (!is.na(dbd$weather[row_num]))
+  # {
+  #   weather_string = dbd$weather[row_num]
+  #   splut = unlist(strsplit(weather_string, split = "[:]"))
+  #   dbd$temperature[row_num] = strtoi(substring(splut[[2]], 2, nchar(splut[[2]])-13))
+  #   dbd$humidity[row_num] = strtoi(substring(splut[[3]], 2, nchar(splut[[3]])-7))
+  #   dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-6, nchar(splut[[4]])-4))
+  #   if (is.na(dbd$wind_speed[row_num]))
+  #     dbd$wind_speed[row_num] = strtoi(substring(splut[[4]], nchar(splut[[4]])-5, nchar(splut[[4]])-4))
+  # }
+  return (dbd)
+}
+
+dbd_create <- function(dbd){
+  for (row_num in 1:nrow(dbd)) 
+  {
+    dbd <- fill_row(row_num, dbd$game_drive_id[row_num], dbd)
+  }
+  return (dbd)
+}
+
+dbd <- dbd_create(dbd)
+dbd$plays = dbd$num_run + dbd$num_pass + dbd$num_no_play + dbd$num_qb_kneel + dbd$num_qb_spike
+dbd$runPercent = (dbd$num_run / dbd$plays) * 100
+dbd$passPercent = (dbd$num_pass / dbd$plays) * 100
+unique(dbd$fixed_drive_result)
+
+dbd <- dbd %>%
+  mutate(drivePoints = case_when(
+    fixed_drive_result == "Punt" ~ 0,
+    fixed_drive_result == "Touchdown" ~ 7,
+    fixed_drive_result == "Opp touchdown" ~ -7,
+    fixed_drive_result == "Field goal" ~ 3,
+    fixed_drive_result == "Turnover" ~ 0,
+    fixed_drive_result == "Turnover on downs" ~ 0,
+    fixed_drive_result == "End of half" ~ 0,
+    fixed_drive_result == "Missed field goal" ~ 0,
+    fixed_drive_result == "Safety" ~ -2,
+    TRUE ~ NA_real_  # This line handles any values not explicitly mentioned
+  ))
+dbd_no_neg = dbd
+dbd_no_neg$total_yards_gained[dbd_no_neg$total_yards_gained<0] <- 0 
+dbd_no_neg$drivePoints[dbd_no_neg$drivePoints<0] <- 0 
+
+# ZIP_model <- zeroinfl(total_yards_gained ~yardline_100+runPercent+passPercent+as.factor(posteam_type), data=dbd_no_neg, dist = "poisson", link="logit")
+# summary(ZIP_model)
+
+pbp$yards_gained[pbp$yards_gained<0] <- 0 
+pbp <- pbp %>% drop_na(drive) %>% drop_na(play_type) %>% drop_na(posteam) %>% filter(play_type =="pass" | play_type=="run")
+```
+
+# Introduction
+
+The NFL, the biggest stage in America’s favorite sport, is viewed by tens of millions of people per game. With its immense popularity, the NFL has become a crucial part of American society, shaping meaningful conversations amongst friends, family, and even strangers. In the center of this craze are the coaches, whose strategy and decision-making can make the difference between victory and loss. These coaches are paid multi-million dollar salaries as a testament to the immense pressure placed on them and a lot is at stake in every single play, with the fate of the players, other coaches, and entire organizations in the palm of their hands. 
+
+With this context, this report dives into the data covering the tens of thousands of plays across the NFL season, aiming to uncover the underlying trends that determine the effectiveness of different offensive strategies, particularly the ongoing debate between running and passing plays. One of the most interesting concepts about American football is the strategic chess match between passing and running plays in the NFL, with game theory in optimizing offensive decisions amidst defensive ones. We analyze the optimal conditions and situations where certain types of plays can maximize influence on the outcome of a given game. 
+
+To provide a preview of the results, our final conclusion based on the analysis is that ____________________________. Further detail is discussed in the latter sections.
+
+
+# Data
+
+The data used in this report is sourced from the play by play data of the 2023 NFL season provided by the NFL readr R package. This dataset is quite extensive, consisting of over 300 variables for each play in every game of the season. The following are the most relevant variables of this dataset that we will be using for the bulk of our analysis:
+
+play_type — keeps track of the play type (run or pass)
+ydstogo — yards needed for a first down
+yards_gained — yards gained on the play
+down — down number for the play
+posteam_type - home/away team (offensive team)
+
+To get a better understanding of the dataset and preliminary information on the variables, we performed the following exploratory data analysis.
+
+Play by Play EDA:
+
+```{r}
+# R chunk with EDA
+```
+
+We see 
+
+Drive by Drive EDA:
+
+```{r}
+# R chunk with EDA
+```
+
+
+We also wanted to perform some trends to analyze how the amount of run and pass plays affect success on a drive level. To do this we wanted a dataset containing drive by drive data which we created from the play by play dataset. We merged data points with the same game id and drive number into one drive data point. For this we counted interesting variables in the play by play data set when merging them into a singular drive. The important variables formed in this process include.
+
++ total_yards_gained - total yards gained over the whole drive
++ posteam_type - home/away team (that is on offense for the drive)
++ drivePoints - number of points that the drive resulted in
++ runPercent - percent of the drive plays that were run plays
++ passPercent - percent of the drive plays that were pass plays
+
+# Methods
+
+## Linear Model
+
+We started our models with one of the simplest models, a linear regression model. For this model we used some of the variables we deemed the most important in the play by play data. This included the playtype (run/pass), yards for first down, and down number. For the purpose of analyzing run vs pass plays, the data was cleaned to include only run and pass type plays and plays that were downs one, two or three. 
+
+## Zero-inflation model: predicting yards
+
+We noticed many plays resulted in zero yards gained or even negative yards progressed. We were interested in what factors most significantly contributed to making a positive number of yards gained but also given that a positive number of yards were gained we were also curious which factors most significantly impacted the number of yards gained. 
+
+To study this, we decided to build a zero-inflation model with a binary logistic regression model to predict whether or not a team would gain zero yards. Following this, we used a Poisson function to model and predict the number of positive yards gained (given that the play had positive yards gained). In order to perform this, we changed all negative values for yards gained in the dataset to zero so that we could differentiate forward moving plays and those without progression.
+
+It is important to note that in football success can not always be determined by gaining yards vs losing yards in a play. There are many plays that gain yards that would be considered failures and considering them as an equal success to a 90 yard touchdown pass would not be the most accurate representation of football. Also though it is more rare, there are times when losing yards isn’t really a failure, for example when a team is kneeling to run down the clock at the end of a game. Due to these issues, the use of this model is most useful for coaches when trying to understand how many yards they need to progress. We further elaborate on the implications of this in the results and conclusion sections.
+
+## Predicting Drive Success Based on Ratio of Play Types
+
+Since we wanted to measure more definitively the success of a play, we seek to analyze on a basis of drive success and a series of plays. To determine this, we create a drive-by-drive dataset and create two separate binary logistic general linear models. We created a binary variable which marked whether a drive resulted in a positive number of scored points and regressed this with whether more runs were made or more passes and the home and away team variables. This helped us understand the importance of incorporating more or fewer runs into a drive and how it impacts success.
+
+We also built a generalized additive model (gam) to further understand the relationship between the percent of plays being runs and whether that play was a scoring play. This model calculates the relative impact of each of the variables included in the model on the output and generates predictions based on the sum of these relationships. Gams are non-linear and we explore the interesting non-linear relationship observed in our regression between run percent and play success in the results section. 
+
+# Results 
+
+## Linear Model
+
+The linear model is very limited in the patterns it can capture in the data and thus it is limited in the results it can provide. However, we do find some interesting trends. These trends can be seen in figure X which provides the predictions of the linear model given if it is a run or pass play, the down number, and the yards to go. Firstly we see that 1st and 2nd down are very similar to each other while 3rd down has a significantly lower EPA. In the context of football this does make sense, as 3rd downs are considered the riskiest out of the three downs as often not making a 3rd down results in a loss of possession through punting and thus 3rd downs have the most potential to lose expected points. Another trend we see is that pass plays seem to have a significantly higher EPA then run plays. This is a little more interesting, likely due to the nature of pass plays and their higher potential for significantly large gains the run plays which most of the time are only for a couple yards. 
+
+```{r}
+# R code for linear model graph
+```
+
+## Zero-inflation model: predicting yards
+
+```{r, echo=FALSE}
+ZIP_model <- zeroinfl(yards_gained ~ ydstogo+play_type+as.factor(posteam_type), data=pbp, dist = "poisson", link="logit")
+summary(ZIP_model)
+```
+
+We find in our zero-inflation model that home field advantage yields an advantage on whether yards were gained but also on the number of yards gained. The logistic regression finds that the log odds of 0 points decreases by about 0.04. More notably having the play being a run decreases the log odds of zero yards gained being 0 more considerably by 1.31. This aligns with intuition about football because runs are more likely to make progress and are generally considered less risky. However, when we turn to our poisson model we find that running has a detrimental effect on the number of yards gained. This also aligns with intuition since passing plays generally cover a larger distance and are either successful or gain no yards. So when given that the play is successful it makes sense for passing plays to be predicted to be more beneficial to gaining more yards. Overall, these results imply that passing plays are riskier for making some measurable progress, but if the team needs to make considerable progress it is more worthwhile to throw a passing play. 
+
+## Predicting Drive Success Based on Ratio of Play Types
+
+This model yielded the familiar result that teams that have home game advantage will likely outperform others in drive success. However, we find interesting results about the relationship between the ratio of run plays to pass plays and the success of the play. Fig X. visualizes this relationship. We find that the most successful drives are those that are around 90% runs. This is very interesting, as many of the professional coaches and even NFL fans will tell you that running 90% of plays will not result in successful drives. We think this may come from an issue in the low number of plays in a drive which means that a drive with 90% runs, has at least 10 plays in it due to the nature of whole numbers. A drive with over 10 plays is very likely to be a successful drive as it has lasted that long. This thus could create a miss representation of the variable. We also notice a peak at equal shares of passes and runs which seems to represent most of the data as we can see from our EDA. The cross-validated model shows that all of the coefficients are significantly non-zero and the standard errors for Fig X. are low. 
+
+In our glm model, we found that having strictly more runs than passes helped increase the odds that a drive would end in a touchdown. This likely can be attributed to having the need for many running plays and few passing, potentially risky, plays in every drive. We found that having more runs than passes increased the log odds of making a pass by 0.32 with a standard error of 0.03 and a p-value of less than 0.05 which suggests that this value is significantly not zero. 
+
+```{r, echo=FALSE, include=TRUE, warning=FALSE}
+dbd_no_neg$more_runs = dbd_no_neg$runPercent>50
+DBD_ZIP_binary <- glm(drivePoints>0 ~ more_runs+as.factor(posteam_type) + plays, data=dbd_no_neg, family = binomial)
+summary(DBD_ZIP_binary)
+
+
+DBD_ZIP <- gam(drivePoints>0 ~ s(runPercent)+as.factor(posteam_type)+s(plays), data=dbd_no_neg)
+plot(DBD_ZIP, col="cornflowerblue")
+```
+
+# Discussion 
+
+## Conclusion
+
+## Limitations
+
+Although our model provides a good overview of comparing play types during certain situations including over different downs and over different distances needed for the first down, there are also many other variables present when considering play calling. For example a team like the lions who have Jahmyr Gibbs and David Montgomery running behind one of the best offensive lines in the league may want to run more than the average NFL team. Defense strength is another important factor, if you are playing against the top cornerbacks in the league, you might want to rely on passing plays less. The specific strengths of the offense and defense team which can be very different impact the play calls a lot. 
+One further thing to consider is the predictability of play calls. Our data treats all of the data points as individual points for this analysis but in reality, there is a lot more depth to it. Offensive coordinators want to make play calls that the opposing defensive coordinator will not expect or is not ready for. 
+
+
+## Future work
+
+	Future work that would be very interesting would be looking into deeper models that consider more intricate variables, one good example being the personnel on the field for a play. It would be very interesting to look at the interactions of these different variables and how they affect the optimal play calls. Another interesting thing to look into would be more specific play calls. For example there are many different types of passing plays and running plays that perform very differently from each other. The model could be overly complicated with the number of possible categorical values increasing with these variables, this could be fixed by vectorizing certain values, for example maybe the personnel on the field instead being measured by numeric values representing the strength of the offense and defense in certain aspects. This would add some interesting analysis and could be performed using the numeric PFF grades that the NFL gives every player in different aspects of their play and is publicly available.
+
+
+
+```{r, echo=FALSE, include=FALSE, warning=FALSE}
+gamModel <- gam(epa ~ play_type + factor(down) + s(ydstogo), data = pbp, na.action=na.exclude)
+summary(gamModel)
+plot(gamModel, pages = 2)
+```
+
+
+
+```{r, echo=FALSE, include=FALSE, warning=FALSE}
+lmModel = lm(epa ~ play_type + factor(down) + ydstogo, data = pbp)
+summary(lmModel)
+```
+
+
