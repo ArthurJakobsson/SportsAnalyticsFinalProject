@@ -128,7 +128,7 @@ dbd <- dbd %>%
     fixed_drive_result == "Punt" ~ 0,
     fixed_drive_result == "Touchdown" ~ 7,
     fixed_drive_result == "Opp touchdown" ~ -7,
-    fixed_drive_result == "Field goal" ~ -3,
+    fixed_drive_result == "Field goal" ~ 3,
     fixed_drive_result == "Turnover" ~ 0,
     fixed_drive_result == "Turnover on downs" ~ 0,
     fixed_drive_result == "End of half" ~ 0,
@@ -165,12 +165,12 @@ plot_predictions(ZIP_model, condition = "ydstogo")
 
 ```{r}
 dbd_no_neg$more_runs = dbd_no_neg$runPercent>50
-DBD_ZIP_binary <- glm(drivePoints>0 ~ more_runs+as.factor(posteam_type), data=dbd_no_neg, family = binomial)
+DBD_ZIP_binary <- gam(drivePoints>0 ~ more_runs+as.factor(posteam_type), data=dbd_no_neg, family = binomial)
 summary(DBD_ZIP_binary)
 
 
-DBD_ZIP <- glm(drivePoints>0 ~ runPercent+as.factor(posteam_type), data=dbd_no_neg, family = binomial)
-summary(DBD_ZIP)
+DBD_ZIP <- gam(drivePoints>0 ~ s(runPercent)+as.factor(posteam_type), data=dbd_no_neg)
+plot(DBD_ZIP, col="cornflowerblue", xlab="Percent of Plays that were Runs in Drive", ylab = "Relative Success s(")
 ```
 
 
