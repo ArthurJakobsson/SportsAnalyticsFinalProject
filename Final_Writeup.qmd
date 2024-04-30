@@ -233,7 +233,7 @@ This model yielded the familiar result that teams that have home game advantage 
 
 In our glm model, we found that having strictly more runs than passes helped increase the odds that a drive would end in a touchdown. This likely can be attributed to having the need for many running plays and few passing, potentially risky, plays in every drive. We found that having more runs than passes increased the log odds of making a pass by 0.32 with a standard error of 0.03 and a p-value of less than 0.05 which suggests that this value is significantly not zero. 
 
-```{r, echo=FALSE, include=TRUE, warning=FALSE}
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.cap = Relationship between plays, runs and successes in drives}
 dbd_no_neg$more_runs = dbd_no_neg$runPercent>50
 DBD_ZIP_binary <- glm(drivePoints>0 ~ more_runs+as.factor(posteam_type) + plays, data=dbd_no_neg, family = binomial)
 summary(DBD_ZIP_binary)
