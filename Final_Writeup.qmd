@@ -16,6 +16,7 @@ library(dplyr)
 library(broom)
 library(tidyr)
 library(tidyverse)
+library(gridExtra)
 library(ggplot2)
 library(glmnet)
 library(progressr)
@@ -150,7 +151,7 @@ The NFL, the biggest stage in America’s favorite sport, is viewed by tens of m
 
 With this context, this report dives into the data covering the tens of thousands of plays across the NFL season, aiming to uncover the underlying trends that determine the effectiveness of different offensive strategies, particularly the ongoing debate between running and passing plays. One of the most interesting concepts about American football is the strategic chess match between passing and running plays in the NFL, with game theory in optimizing offensive decisions amidst defensive ones. We analyze the optimal conditions and situations where certain types of plays can maximize influence on the outcome of a given game. 
 
-To provide a preview of the results, our final conclusion based on the analysis is that ____________________________. Further detail is discussed in the latter sections.
+To provide a preview of the results, our final conclusion based on the analysis is that pass plays are riskier but more beneficial for gaining many yards, whereas run plays are more likely to guarantee guards gained. Similarly having a larger percentage of running plays in a drive generally yields a higher chance of scoring in a football game.  Further detail is discussed in the latter sections.
 
 
 # Data
@@ -165,20 +166,56 @@ posteam_type - home/away team (offensive team)
 
 To get a better understanding of the dataset and preliminary information on the variables, we performed the following exploratory data analysis.
 
-Play by Play EDA:
+### Play by Play EDA:
 
-```{r}
-# R chunk with EDA
+```{r,echo=FALSE, warning=FALSE, message=FALSE}
+
+dist_yardsgained <- ggplot(pbp, aes(x = yards_gained)) +
+  geom_histogram(binwidth = 5, fill = "pink", color = "black") +
+  labs(x = "Yards Gained", y = "Frequency", title = "Distribution of Yards Gained")
+dist_yardsgained
+
+pt <- table(pbp$play_type)
+df_pt <- data.frame(play_type = names(pt), count = as.numeric(pt))
+dist_pt <- ggplot(df_pt, aes(x = play_type, y = count)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Play Type", y = "Frequency", title = "Distribution of Play Types")
+dist_pt
+
+plot_down <- ggplot(pbp, aes(x = down, y = ydstogo, color = play_type)) +
+  geom_point() +
+  labs(x = "Down", y = "Yards to Go", title = "Down vs. Yards to Go")
+plot_down
+
+runs_data <- subset(pbp, play_type == "run")
+runs_plot <- ggplot(runs_data, aes(x = yards_gained)) +
+  geom_histogram(binwidth = 5, fill = "cornflowerblue", color = "black") +
+  labs(x = "Yards Gained", y = "Frequency", title = "Distribution of Yards Gained for Runs")
+
+passes_data <- subset(pbp, play_type == "pass")
+passes_plot <- ggplot(passes_data, aes(x = yards_gained)) +
+  geom_histogram(binwidth = 5, fill = "cornflowerblue", color = "black") +
+  labs(x = "Yards Gained", y = "Frequency", title = "Distribution of Yards Gained for Passes")
+grid.arrange(runs_plot, passes_plot, ncol = 2)
 ```
 
-We see 
+We see that the distribution of yards gained for runs, passes, and both are all centered around zero and passes and runs are the most common in the distribution of play types. In the above figure, we visualize the yards to go colored by play type for each of the four downs and conclude that runs occur often in the first down, passes in the second and third downs, and punts in the fourth down. With this EDA, there doesn’t seem to be anything unexpected in terms of the general trajectory of the plays. 
 
-Drive by Drive EDA:
 
-```{r}
-# R chunk with EDA
+### Drive by Drive EDA:
+
+```{r,echo=FALSE, warning=FALSE}
+hist_run <- ggplot(dbd, aes(x = runPercent)) +
+  geom_histogram(binwidth = 5, fill = "lavender", color = "black") +
+  labs(x = "Run Percentage", y = "Frequency", title = "Distribution of Run Percentage")
+hist_run
+
+bar_drivepoints <- ggplot(dbd, aes(x = fixed_drive_result, y = drivePoints)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Drive Result", y = "Drive Points", title = "Drive Points by Result")
+bar_drivepoints + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-
+In terms of drive by drive we see that plays are roughly half passes and half runs, where the peak at 0 either represents the passes being successful or intercepted. The drive result points based on results show that most drive points were mostly from touchdowns and some from field goals and the loss of points is largely due to the opponent team’s touchdowns. Like the pbp EDA, there doesn’t seem to be anything unexpected in the drives either.
 
 We also wanted to perform some trends to analyze how the amount of run and pass plays affect success on a drive level. To do this we wanted a dataset containing drive by drive data which we created from the play by play dataset. We merged data points with the same game id and drive number into one drive data point. For this we counted interesting variables in the play by play data set when merging them into a singular drive. The important variables formed in this process include.
 
@@ -212,10 +249,26 @@ We also built a generalized additive model (gam) to further understand the relat
 
 ## Linear Model
 
-The linear model is very limited in the patterns it can capture in the data and thus it is limited in the results it can provide. However, we do find some interesting trends. These trends can be seen in figure X which provides the predictions of the linear model given if it is a run or pass play, the down number, and the yards to go. Firstly we see that 1st and 2nd down are very similar to each other while 3rd down has a significantly lower EPA. In the context of football this does make sense, as 3rd downs are considered the riskiest out of the three downs as often not making a 3rd down results in a loss of possession through punting and thus 3rd downs have the most potential to lose expected points. Another trend we see is that pass plays seem to have a significantly higher EPA then run plays. This is a little more interesting, likely due to the nature of pass plays and their higher potential for significantly large gains the run plays which most of the time are only for a couple yards. 
+The linear model is very limited in the patterns it can capture in the data and thus it is limited in the results it can provide. However, we do find some interesting trends. These trends can be seen in figure 1 below which provides the predictions of the linear model given if it is a run or pass play, the down number, and the yards to go. Firstly we see that 1st and 2nd down are very similar to each other while 3rd down has a significantly lower EPA. In the context of football this does make sense, as 3rd downs are considered the riskiest out of the three downs as often not making a 3rd down results in a loss of possession through punting and thus 3rd downs have the most potential to lose expected points. Another trend we see is that pass plays seem to have a significantly higher EPA then run plays. This is a little more interesting, likely due to the nature of pass plays and their higher potential for significantly large gains the run plays which most of the time are only for a couple yards. 
 
-```{r}
-# R code for linear model graph
+```{r, echo=FALSE, warning=FALSE, fig.cap= "Linear model visualization"}
+# Filter the dataset
+lmModel = lm(epa ~ play_type + factor(down) + ydstogo, data = pbp)
+
+filtered_pbp <- pbp[ pbp$play_type %in% c("run", "pass") & pbp$down %in% c(1, 2, 3), ]
+
+# View the filtered dataset
+
+data <- expand.grid(ydstogo = 0:10, down = 1:3, play_type = c("run", "pass"))
+
+data$predicted_epa <- predict(lmModel, newdata = data)
+
+ggplot(data, aes(x = ydstogo, y = predicted_epa, color = play_type, linetype = factor(down))) +
+  geom_line() +
+  labs(x = "Yards to Go", y = "Predicted EPA") +
+  scale_color_discrete(name = "Play Type") +
+  scale_linetype_discrete(name = "Down") +
+  theme_minimal()
 ```
 
 ## Zero-inflation model: predicting yards
@@ -229,11 +282,11 @@ We find in our zero-inflation model that home field advantage yields an advantag
 
 ## Predicting Drive Success Based on Ratio of Play Types
 
-This model yielded the familiar result that teams that have home game advantage will likely outperform others in drive success. However, we find interesting results about the relationship between the ratio of run plays to pass plays and the success of the play. The figure below visualizes this relationship. We find that the most successful drives are those that are around 90% runs. This is very interesting, as many of the professional coaches and even NFL fans will tell you that running 90% of plays will not result in successful drives. We think this may come from an issue in the low number of plays in a drive which means that a drive with 90% runs, has at least 10 plays in it due to the nature of whole numbers. A drive with over 10 plays is very likely to be a successful drive as it has lasted that long. This thus could create a miss representation of the variable. We observe that this relationship, however, still while controlling for the number of plays which means that there is may be some benefit to running the for about 90% of plays in a drive. This could be because a successful drive is one which has many runs with one or two riskier pass plays to gain more yardage; this is just a hypothesis however and more analysis would need to be conducted to understand for sure. The cross-validated model shows that all of the coefficients are significantly non-zero and the standard errors for the figure below. are low. 
+This model yielded the familiar result that teams that have home game advantage will likely outperform others in drive success. However, we find interesting results about the relationship between the ratio of run plays to pass plays and the success of the play. The figure below visualizes this relationship. We find that the most successful drives are those that are around 90% runs. This is very interesting, as many of the professional coaches and even NFL fans will tell you that running 90% of plays will not result in successful drives. We think this may come from an issue in the low number of plays in a drive which means that a drive with 90% runs, has at least 10 plays in it due to the nature of whole numbers. A drive with over 10 plays is very likely to be a successful drive as it has lasted that long. This thus could create a miss representation of the variable. We observe that this relationship, however, still while controlling for the number of plays which means that there is may be some benefit to running the for about 90% of plays in a drive. This could be because a successful drive is one which has many runs with one or two riskier pass plays to gain more yardage; this is just a hypothesis however and more analysis would need to be conducted to understand for sure. The cross-validated model shows that all of the coefficients are significantly non-zero and the standard errors for the figure below are low. 
 
 In our glm model, we found that having strictly more runs than passes helped increase the odds that a drive would end in a touchdown. This likely can be attributed to having the need for many running plays and few passing, potentially risky, plays in every drive. We found that having more runs than passes increased the log odds of making a pass by 0.32 with a standard error of 0.03 and a p-value of less than 0.05 which suggests that this value is significantly not zero. 
 
-```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.cap = Relationship between plays, runs and successes in drives}
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.cap = "Relationship between plays, runs and successes in drives"}
 dbd_no_neg$more_runs = dbd_no_neg$runPercent>50
 DBD_ZIP_binary <- glm(drivePoints>0 ~ more_runs+as.factor(posteam_type) + plays, data=dbd_no_neg, family = binomial)
 summary(DBD_ZIP_binary)
@@ -257,7 +310,7 @@ One further thing to consider is the predictability of play calls. Our data trea
 
 ## Future work
 
-	Future work that would be very interesting would be looking into deeper models that consider more intricate variables, one good example being the personnel on the field for a play. It would be very interesting to look at the interactions of these different variables and how they affect the optimal play calls. Another interesting thing to look into would be more specific play calls. For example there are many different types of passing plays and running plays that perform very differently from each other. The model could be overly complicated with the number of possible categorical values increasing with these variables, this could be fixed by vectorizing certain values, for example maybe the personnel on the field instead being measured by numeric values representing the strength of the offense and defense in certain aspects. This would add some interesting analysis and could be performed using the numeric PFF grades that the NFL gives every player in different aspects of their play and is publicly available.
+Future work that would be very interesting would be looking into deeper models that consider more intricate variables, one good example being the personnel on the field for a play. It would be very interesting to look at the interactions of these different variables and how they affect the optimal play calls. Another interesting thing to look into would be more specific play calls. For example there are many different types of passing plays and running plays that perform very differently from each other. The model could be overly complicated with the number of possible categorical values increasing with these variables, this could be fixed by vectorizing certain values, for example maybe the personnel on the field instead being measured by numeric values representing the strength of the offense and defense in certain aspects. This would add some interesting analysis and could be performed using the numeric PFF grades that the NFL gives every player in different aspects of their play and is publicly available.
 
 
 
@@ -275,3 +328,6 @@ summary(lmModel)
 ```
 
 
+# Appendix
+
+We make our code which includes all the plot and summary generation available at the following github link. https://github.com/ArthurJakobsson/SportsAnalyticsFinalProject. The final code is available in the Final_Writeup.qmd file. Both the masterdocument and playground files were used for model experimentation and preliminary analysis.
