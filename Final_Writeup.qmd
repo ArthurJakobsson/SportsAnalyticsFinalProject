@@ -247,6 +247,8 @@ plot(DBD_ZIP, col="cornflowerblue")
 
 ## Conclusion
 
+From our models we seem interesting results. Firstly we see that given a set play between downs one and three and no other information, running is the best approach over passing. As we move to our deeper models we see some more interesting results. We start to see that nature of passing plays, passing plays are seen to have more benefit when many yards are needed which makes sense due to their riskier nature. Running has a better guarentee of getting some yards and is thus the safer play. Another common trend we see through our models is that home field advantage is definitely present and significant. Earning those hame playoff games in the NFL can be game changing for a team's success. We see similar trends here with higher run percent drives generally correlating with higher success drives.
+
 ## Limitations
 
 Although our model provides a good overview of comparing play types during certain situations including over different downs and over different distances needed for the first down, there are also many other variables present when considering play calling. For example a team like the lions who have Jahmyr Gibbs and David Montgomery running behind one of the best offensive lines in the league may want to run more than the average NFL team. Defense strength is another important factor, if you are playing against the top cornerbacks in the league, you might want to rely on passing plays less. The specific strengths of the offense and defense team which can be very different impact the play calls a lot. 
